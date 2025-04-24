@@ -1,0 +1,32 @@
+{
+  "name": "dev-assistant",
+  "displayName": "Dev Assistant",
+  "description": "A Dev Assistant extension with WebView buttons.",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "activationEvents": [
+    "onCommand:dev-assistant.openPanel"
+  ],
+  "main": "./out/extension.js",
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "test": "node ./out/test/runTest.js"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "dev-assistant.openPanel",
+        "title": "Open Dev Assistant"
+      }
+    ]
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.70.0",
+    "typescript": "^4.8.0",
+    "vscode-test": "^1.6.0"
+  }
+}
