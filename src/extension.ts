@@ -1,5 +1,9 @@
 import * as vscode from 'vscode';
 
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
+const genAI = new GoogleGenerativeAI("");
+
 export function activate(context: vscode.ExtensionContext) {
   const disposable = vscode.commands.registerCommand('dev-assistant.openPanel', () => {
     const panel = vscode.window.createWebviewPanel(
@@ -22,16 +26,60 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(disposable);
 }
 
-function handleCommand(command: string) {
-  switch (command) {
-    case 'generateTests':
-      vscode.window.showInformationMessage('🧪 Generating unit tests...');
-      break;
-    case 'fixSnyk':
-      vscode.window.showInformationMessage('🔧 Fixing Snyk vulnerabilities...');
-      break;
-    default:
-      vscode.window.showWarningMessage(`Unknown command: ${command}`);
+async function handleCommand(command: string) {
+  const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+
+  try {
+    switch (command) {
+      case 'generateTests':
+        vscode.window.showInformationMessage('🧪 Generating unit tests...');
+        const activeEditor = vscode.window.activeTextEditor;
+        if (!activeEditor) {
+          vscode.window.showWarningMessage('No active file selected');
+          return;
+        }
+
+        const codeForTests = activeEditor.document.getText();
+        const testPrompt = `Generate unit tests for this code:\n${codeForTests}`;
+
+        const testResult = await model.generateContent(testPrompt);
+        const testResponse = await testResult.response;
+
+        // Create a new file with the generated tests
+        const testDoc = await vscode.workspace.openTextDocument({
+          content: testResponse.text(),
+          language: 'typescript'
+        });
+        await vscode.window.showTextDocument(testDoc);
+        break;
+
+      case 'fixSnyk':
+        vscode.window.showInformationMessage('🔧 Analyzing security vulnerabilities...');
+        const vulnEditor = vscode.window.activeTextEditor;
+        if (!vulnEditor) {
+          vscode.window.showWarningMessage('No active file selected');
+          return;
+        }
+
+        const codeToFix = vulnEditor.document.getText();
+        const securityPrompt = `Analyze this code for security vulnerabilities and suggest fixes:\n${codeToFix}`;
+
+        const securityResult = await model.generateContent(securityPrompt);
+        const securityResponse = await securityResult.response;
+
+        // Show security recommendations in a new document
+        const securityDoc = await vscode.workspace.openTextDocument({
+          content: securityResponse.text(),
+          language: 'markdown'
+        });
+        await vscode.window.showTextDocument(securityDoc);
+        break;
+
+      default:
+        vscode.window.showWarningMessage(`Unknown command: ${command}`);
+    }
+  } catch (error) {
+    vscode.window.showErrorMessage(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
