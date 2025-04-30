@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 const vscode = require("vscode");
 const generative_ai_1 = require("@google/generative-ai");
-const genAI = new generative_ai_1.GoogleGenerativeAI("AIzaSyCuGikWJB1sxYRaYs4deQEafZ7iIY3i9lk");
+const genAI = new generative_ai_1.GoogleGenerativeAI("");
 function activate(context) {
     console.log('Dev Assistant extension activated.');
     const disposable = vscode.commands.registerCommand('dev-assistant.openPanel', () => {
