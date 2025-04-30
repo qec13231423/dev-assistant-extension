@@ -1,15 +1,15 @@
 import * as vscode from 'vscode';
-
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const genAI = new GoogleGenerativeAI("");
 
 export function activate(context: vscode.ExtensionContext) {
+  console.log('Dev Assistant extension activated.');
   const disposable = vscode.commands.registerCommand('dev-assistant.openPanel', () => {
     const panel = vscode.window.createWebviewPanel(
       'devAssistant',
       'Dev Assistant',
-      vscode.ViewColumn.One,
+      vscode.ViewColumn.Active,
       {
         enableScripts: true,
         retainContextWhenHidden: true
@@ -19,6 +19,7 @@ export function activate(context: vscode.ExtensionContext) {
     panel.webview.html = getWebviewContent();
 
     panel.webview.onDidReceiveMessage((message: { command: string }) => {
+      console.log(`Message received from WebView: ${JSON.stringify(message)}`);
       handleCommand(message.command);
     });
   });
@@ -27,58 +28,132 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 async function handleCommand(command: string) {
+  console.log(`handleCommand triggered with command: ${command}`);
   const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
 
   try {
     switch (command) {
-      case 'generateTests':
+      case 'generateTests': {
         vscode.window.showInformationMessage('🧪 Generating unit tests...');
+        console.log('Preparing to call genAI for unit test generation.');
+        let codeForTests: string | undefined;
+
         const activeEditor = vscode.window.activeTextEditor;
-        if (!activeEditor) {
-          vscode.window.showWarningMessage('No active file selected');
+        if (activeEditor) {
+          const selection = activeEditor.selection;
+          codeForTests = activeEditor.document.getText(selection.isEmpty ? undefined : selection);
+        } else {
+          // Allow the user to select a file from the workspace
+          const files = await vscode.workspace.findFiles('**/*', '**/node_modules/**');
+          if (files.length === 0) {
+            vscode.window.showWarningMessage('No files found in the workspace.');
+            return;
+          }
+
+          const fileUri = await vscode.window.showQuickPick(
+            files.map(file => ({
+              label: vscode.workspace.asRelativePath(file),
+              description: file.fsPath,
+              uri: file
+            })),
+            {
+              placeHolder: 'Select a file from the workspace',
+              canPickMany: false
+            }
+          );
+
+          if (!fileUri) {
+            vscode.window.showErrorMessage('No file selected. Operation cancelled.');
+            return;
+          }
+
+          const document = await vscode.workspace.openTextDocument(fileUri.uri);
+          codeForTests = document.getText();
+          await vscode.window.showTextDocument(document);
+        }
+
+        if (!codeForTests || codeForTests.trim() === '') {
+          vscode.window.showWarningMessage('No code selected or file is empty.');
           return;
         }
 
-        const codeForTests = activeEditor.document.getText();
         const testPrompt = `Generate unit tests for this code:\n${codeForTests}`;
+        console.log('Sending prompt to genAI:', testPrompt);
 
         const testResult = await model.generateContent(testPrompt);
         const testResponse = await testResult.response;
 
-        // Create a new file with the generated tests
         const testDoc = await vscode.workspace.openTextDocument({
           content: testResponse.text(),
           language: 'typescript'
         });
         await vscode.window.showTextDocument(testDoc);
         break;
+      }
 
-      case 'fixSnyk':
+      case 'fixSnyk': {
         vscode.window.showInformationMessage('🔧 Analyzing security vulnerabilities...');
+        console.log('Preparing to call genAI for security analysis.');
+        let codeToFix: string | undefined;
+
         const vulnEditor = vscode.window.activeTextEditor;
-        if (!vulnEditor) {
-          vscode.window.showWarningMessage('No active file selected');
+        if (vulnEditor) {
+          const selection = vulnEditor.selection;
+          codeToFix = vulnEditor.document.getText(selection.isEmpty ? undefined : selection);
+        } else {
+          // Allow the user to select a file from the workspace
+          const files = await vscode.workspace.findFiles('**/*', '**/node_modules/**');
+          if (files.length === 0) {
+            vscode.window.showWarningMessage('No files found in the workspace.');
+            return;
+          }
+
+          const fileUri = await vscode.window.showQuickPick(
+            files.map(file => ({
+              label: vscode.workspace.asRelativePath(file),
+              description: file.fsPath,
+              uri: file
+            })),
+            {
+              placeHolder: 'Select a file from the workspace',
+              canPickMany: false
+            }
+          );
+
+          if (!fileUri) {
+            vscode.window.showErrorMessage('No file selected. Operation cancelled.');
+            return;
+          }
+
+          const document = await vscode.workspace.openTextDocument(fileUri.uri);
+          codeToFix = document.getText();
+          await vscode.window.showTextDocument(document);
+        }
+
+        if (!codeToFix || codeToFix.trim() === '') {
+          vscode.window.showWarningMessage('No code selected or file is empty.');
           return;
         }
 
-        const codeToFix = vulnEditor.document.getText();
         const securityPrompt = `Analyze this code for security vulnerabilities and suggest fixes:\n${codeToFix}`;
+        console.log('Sending prompt to genAI:', securityPrompt);
 
         const securityResult = await model.generateContent(securityPrompt);
         const securityResponse = await securityResult.response;
 
-        // Show security recommendations in a new document
         const securityDoc = await vscode.workspace.openTextDocument({
           content: securityResponse.text(),
           language: 'markdown'
         });
         await vscode.window.showTextDocument(securityDoc);
         break;
+      }
 
       default:
         vscode.window.showWarningMessage(`Unknown command: ${command}`);
     }
   } catch (error) {
+    console.error('Error during handleCommand:', error);
     vscode.window.showErrorMessage(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -123,8 +198,10 @@ function getWebviewContent(): string {
       <button onclick="sendMessage('fixSnyk')">🔧 Fix Snyk Vulnerabilities</button>
 
       <script>
+        // Define the sendMessage function globally
         const vscode = acquireVsCodeApi();
         function sendMessage(command) {
+          console.log('Sending message to extension:', command); // Log in WebView
           vscode.postMessage({ command });
         }
       </script>
