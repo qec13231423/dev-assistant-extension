@@ -17,6 +17,24 @@
     "test": "node ./out/test/runTest.js"
   },
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "dev-assistant",
+          "title": "Dev Assistant",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "dev-assistant": [
+        {
+          "id": "dev-assistant-view",
+          "name": "Dev Assistant",
+          "type": "webview"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "dev-assistant.openPanel",
@@ -30,6 +48,6 @@
     "vscode-test": "^1.6.0"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.24.0"
+    "@google/generative-ai": "^0.24.1"
   }
 }

@@ -4,33 +4,81 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 const genAI = new GoogleGenerativeAI("");
 
 export function activate(context: vscode.ExtensionContext) {
-  console.log('Dev Assistant extension activated.');
-  const disposable = vscode.commands.registerCommand('dev-assistant.openPanel', () => {
-    const panel = vscode.window.createWebviewPanel(
-      'devAssistant',
-      'Dev Assistant',
-      vscode.ViewColumn.Active,
-      {
-        enableScripts: true,
-        retainContextWhenHidden: true
-      }
-    );
+  // Register the custom sidebar provider
+  const provider = new DevAssistantViewProvider(context.extensionUri);
 
-    panel.webview.html = getWebviewContent();
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider('dev-assistant-view', provider)
+  );
+}
 
-    panel.webview.onDidReceiveMessage((message: { command: string }) => {
-      console.log(`Message received from WebView: ${JSON.stringify(message)}`);
-      handleCommand(message.command);
+class DevAssistantViewProvider implements vscode.WebviewViewProvider {
+  constructor(private readonly _extensionUri: vscode.Uri) {}
+
+  public resolveWebviewView(
+    webviewView: vscode.WebviewView,
+    context: vscode.WebviewViewResolveContext,
+    _token: vscode.CancellationToken,
+  ) {
+    webviewView.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [this._extensionUri]
+    };
+
+    webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+
+    webviewView.webview.onDidReceiveMessage(async (message) => {
+      await handleCommand(message.command);
     });
-  });
+  }
 
-  context.subscriptions.push(disposable);
+  private _getHtmlForWebview(webview: vscode.Webview) {
+    return `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Dev Assistant</title>
+        <style>
+          body {
+            padding: 10px;
+          }
+          button {
+            width: 100%;
+            padding: 8px;
+            margin: 4px 0;
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            border-radius: 2px;
+            cursor: pointer;
+          }
+          button:hover {
+            background: var(--vscode-button-hoverBackground);
+          }
+        </style>
+      </head>
+      <body>
+        <button onclick="sendMessage('generateTests')">🧪 Generate Unit Tests</button>
+        <button onclick="sendMessage('fixSnyk')">🔧 Fix Snyk Vulnerabilities</button>
+        
+        <script>
+          const vscode = acquireVsCodeApi();
+          function sendMessage(command) {
+            vscode.postMessage({ command });
+          }
+        </script>
+      </body>
+      </html>
+    `;
+  }
 }
 
 async function handleCommand(command: string) {
   console.log(`handleCommand triggered with command: ${command}`);
-  const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
-
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro-latest' });
+  
   try {
     switch (command) {
       case 'generateTests': {
@@ -77,14 +125,20 @@ async function handleCommand(command: string) {
           return;
         }
 
-        const testPrompt = `Generate unit tests for this code:\n${codeForTests}`;
+        const testPrompt = `Generate only the code for unit tests. No explanations, no markdown formatting, just the raw code:\n${codeForTests}`;
         console.log('Sending prompt to genAI:', testPrompt);
 
         const testResult = await model.generateContent(testPrompt);
         const testResponse = await testResult.response;
 
+        // Clean up the response to get pure code
+        let cleanCode = testResponse.text()
+        .replace(/```[a-z]*\n/g, '') // Remove opening code fence
+        .replace(/```\n?/g, '')      // Remove closing code fence
+        .trim();                     // Remove extra whitespace
+
         const testDoc = await vscode.workspace.openTextDocument({
-          content: testResponse.text(),
+          content: cleanCode,
           language: 'typescript'
         });
         await vscode.window.showTextDocument(testDoc);
@@ -156,56 +210,4 @@ async function handleCommand(command: string) {
     console.error('Error during handleCommand:', error);
     vscode.window.showErrorMessage(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
-}
-
-function getWebviewContent(): string {
-  return `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <title>Dev Assistant</title>
-      <style>
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-          padding: 20px;
-          background-color: #1e1e1e;
-          color: #d4d4d4;
-        }
-        h2 {
-          font-size: 1.5rem;
-          margin-bottom: 1em;
-        }
-        button {
-          background-color: #007acc;
-          color: white;
-          border: none;
-          padding: 10px 16px;
-          margin: 8px 0;
-          border-radius: 5px;
-          cursor: pointer;
-          font-size: 1rem;
-          transition: background-color 0.3s;
-        }
-        button:hover {
-          background-color: #005f9e;
-        }
-      </style>
-    </head>
-    <body>
-      <h2>🛠️ Dev Assistant</h2>
-      <button onclick="sendMessage('generateTests')">🧪 Generate Unit Tests</button>
-      <button onclick="sendMessage('fixSnyk')">🔧 Fix Snyk Vulnerabilities</button>
-
-      <script>
-        // Define the sendMessage function globally
-        const vscode = acquireVsCodeApi();
-        function sendMessage(command) {
-          console.log('Sending message to extension:', command); // Log in WebView
-          vscode.postMessage({ command });
-        }
-      </script>
-    </body>
-    </html>
-  `;
 }
